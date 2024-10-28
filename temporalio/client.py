@@ -5252,37 +5252,7 @@ class _ClientImpl(OutboundInterceptor):
     async def start_workflow_update(
         self, input: StartWorkflowUpdateInput
     ) -> WorkflowUpdateHandle[Any]:
-        # Build request
-        req = temporalio.api.workflowservice.v1.UpdateWorkflowExecutionRequest(
-            namespace=self._client.namespace,
-            workflow_execution=temporalio.api.common.v1.WorkflowExecution(
-                workflow_id=input.id,
-                run_id=input.run_id or "",
-            ),
-            request=temporalio.api.update.v1.Request(
-                meta=temporalio.api.update.v1.Meta(
-                    update_id=input.update_id or str(uuid.uuid4()),
-                    identity=self._client.identity,
-                ),
-                input=temporalio.api.update.v1.Input(
-                    name=input.update,
-                ),
-            ),
-            wait_policy=temporalio.api.update.v1.WaitPolicy(
-                lifecycle_stage=temporalio.api.enums.v1.UpdateWorkflowExecutionLifecycleStage.ValueType(
-                    input.wait_for_stage
-                )
-            ),
-        )
-        if input.args:
-            req.request.input.args.payloads.extend(
-                await self._client.data_converter.encode(input.args)
-            )
-        if input.headers is not None:
-            temporalio.common._apply_headers(
-                input.headers, req.request.input.header.fields
-            )
-
+        req = await self._build_update_workflow_execution_request(input)
         # Repeatedly try to invoke start until the update reaches user-provided
         # wait stage or is at least ACCEPTED (as of the time of this writing,
         # the user cannot specify sooner than ACCEPTED)
@@ -5326,6 +5296,40 @@ class _ClientImpl(OutboundInterceptor):
         if input.wait_for_stage == WorkflowUpdateStage.COMPLETED:
             await handle._poll_until_outcome()
         return handle
+
+    async def _build_update_workflow_execution_request(
+        self, input: StartWorkflowUpdateInput
+    ) -> temporalio.api.workflowservice.v1.UpdateWorkflowExecutionRequest:
+        req = temporalio.api.workflowservice.v1.UpdateWorkflowExecutionRequest(
+            namespace=self._client.namespace,
+            workflow_execution=temporalio.api.common.v1.WorkflowExecution(
+                workflow_id=input.id,
+                run_id=input.run_id or "",
+            ),
+            request=temporalio.api.update.v1.Request(
+                meta=temporalio.api.update.v1.Meta(
+                    update_id=input.update_id or str(uuid.uuid4()),
+                    identity=self._client.identity,
+                ),
+                input=temporalio.api.update.v1.Input(
+                    name=input.update,
+                ),
+            ),
+            wait_policy=temporalio.api.update.v1.WaitPolicy(
+                lifecycle_stage=temporalio.api.enums.v1.UpdateWorkflowExecutionLifecycleStage.ValueType(
+                    input.wait_for_stage
+                )
+            ),
+        )
+        if input.args:
+            req.request.input.args.payloads.extend(
+                await self._client.data_converter.encode(input.args)
+            )
+        if input.headers is not None:
+            temporalio.common._apply_headers(
+                input.headers, req.request.input.header.fields
+            )
+        return req
 
     ### Async activity calls
 
